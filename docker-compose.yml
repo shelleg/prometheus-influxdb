@@ -1,0 +1,139 @@
+version: '3.3'
+
+volumes:
+  influxdb_data: {}
+  prometheus_data: {}
+  prometheus_federate_data: {}
+  grafana_data: {}
+
+networks:
+  monitoring: {}
+  # logging: {}
+
+services:
+
+  prometheus:
+    image: prom/prometheus:v2.1.0
+    ports:
+      - "9090:9090"
+    expose:
+      - 9090
+    volumes:
+      - ./prometheus/:/etc/prometheus/
+      - prometheus_data:/prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - monitoring
+    labels:
+      container_group: monitoring
+    depends_on:
+      - influxdb
+
+
+  prometheus_federate:
+    image: prom/prometheus:v2.1.0
+    ports:
+      - "9009:9090"
+    expose:
+      - "9009"
+    volumes:
+      - prometheus_federate_data:/prometheus
+      - ./prometheus_federate/:/etc/prometheus/
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - monitoring
+    labels:
+      container_group: monitoring
+
+  chronograf:
+    ports:
+       - '8888:8888'
+    image: chronograf:1.4.1.2
+    expose:
+      - '8888'
+    networks:
+      - monitoring
+    command:
+      - '--influxdb-url=http://influxdb:8086'
+
+  influxdb:
+    hostname: influxdb
+    container_name: influxdb
+    image: influxdb:1.4.3
+    expose:
+      - "8083"
+      - "8086"
+    ports:
+      - "8083:8083"
+      - "8086:8086"
+    volumes:
+      - influxdb_data:/var/lib/influxdb
+    restart: unless-stopped
+    environment:
+      INFLUXDB_ADMIN_ENABLED: 'true'
+    networks:
+      - monitoring
+    labels:
+      container_group: monitoring
+
+  grafana:
+    image: grafana/grafana
+    expose:
+      - "3000"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    restart: always
+    labels:
+        labels: container_group
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: monitor
+    networks:
+      - monitoring
+
+  # alertmanager:
+  #   image: prom/alertmanager
+  #   expose:
+  #     - 9093
+  #   restart: always
+  #   volumes:
+  #     - ./alertmanager/:/etc/alertmanager/
+  #     - ../storage/alertmanager/:/alertmanager
+  #   command:
+  #     - '-config.file=/etc/alertmanager/config.yml'
+  #     - '-storage.path=/alertmanager'
+  #   labels:
+  #     container_group: monitoring
+
+  node-exporter:
+    image: prom/node-exporter
+    expose:
+      - 9100
+    restart: always
+    labels:
+      container_group: monitoring
+    networks:
+      - monitoring
+
+  cadvisor:
+    image: google/cadvisor
+    expose:
+      - 8080
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    restart: always
+    networks:
+      - monitoring
+    labels:
+      container_group: monitoring
